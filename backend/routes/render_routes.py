@@ -10,6 +10,34 @@ from backend.database import get_db, Project, Scene, RenderJob
 from backend.config import PROJECTS_DIR, AI_KEPU_DIR
 from backend.log_stream import emit_log
 
+@bp.route('/api/projects/<int:pid>/render/manim-cmd', methods=['GET'])
+def manim_commands(pid):
+    """Get exact manim commands to run in user's own terminal"""
+    db = get_db()
+    try:
+        p = db.query(Project).get(pid)
+        if not p:
+            return jsonify({'error': 'not_found'}), 404
+        project_dir = PROJECTS_DIR / p.slug
+        script_files = sorted(project_dir.glob('scenes_*.py'))
+        if not script_files:
+            return jsonify({'error': 'no scripts yet — run 生成脚本 first'}), 400
+        commands = []
+        for sf in script_files:
+            with open(sf, 'r', encoding='utf-8') as f:
+                code = f.read()
+            scene_classes = re.findall(r'class\s+(S\d+_\w+)\(KepuScene\)', code)
+            if scene_classes:
+                commands.append({
+                    'file': sf.name,
+                    'scenes': scene_classes,
+                    'cmd_ql': f'cd "{project_dir}" && manim -ql {sf.name} {" ".join(scene_classes)}',
+                    'cmd_qh': f'cd "{project_dir}" && manim -qh {sf.name} {" ".join(scene_classes)}',
+                })
+        return jsonify({'project_dir': str(project_dir), 'commands': commands})
+    finally:
+        db.close()
+
 @bp.route('/api/projects/<int:pid>/render/manim', methods=['POST'])
 def render_manim(pid):
     data = request.get_json() or {}

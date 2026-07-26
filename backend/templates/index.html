@@ -496,25 +496,61 @@ async function enhanceOne(eid) {
 // ═══════════════ RENDER + LIVE LOGS ═══════════════
 async function loadRender(main) {
   if(!currentProjectId){ main.innerHTML='<div class="card" style="text-align:center;padding:40px;color:var(--muted)">请先打开项目</div>'; return; }
+  
+  // Get capabilities
+  const health = await api('GET','/api/health');
+  const manimOk = health.capabilities?.manim;
+  
   let h = '<h2 style="color:var(--green);margin-bottom:20px">⚡ 渲染中心</h2>';
-  h += '<div class="card"><h3>1. Manim 渲染</h3><div class="btn-group">';
-  h += '<button class="btn btn-primary" onclick="doManim(\'ql\')">草稿 (-ql 480p)</button>';
-  h += '<button class="btn btn-primary" onclick="doManim(\'qh\')">成品 (-qh 1080p60)</button>';
-  h += '</div></div>';
+  
+  // Manim section
+  h += '<div class="card"><h3>1. Manim 渲染</h3>';
+  if(manimOk) {
+    h += '<div class="btn-group">';
+    h += '<button class="btn btn-primary" onclick="doManim(\'ql\')">草稿 (-ql 480p)</button>';
+    h += '<button class="btn btn-primary" onclick="doManim(\'qh\')">成品 (-qh 1080p60)</button>';
+    h += '</div>';
+  } else {
+    h += '<div style="color:var(--gold);margin-bottom:8px">⚠️ Manim 在此环境不可用 (AppLocker)。请在你自己终端运行以下命令:</div>';
+    h += '<button class="btn btn-primary" onclick="showManimCmds()">📋 查看 Manim 命令</button>';
+  }
+  h += '</div>';
+  
+  // TTS section
   h += '<div class="card"><h3>2. TTS 配音</h3><div class="btn-group">';
-  h += '<button class="btn btn-primary" onclick="doTTS()">生成配音</button>';
+  h += '<button class="btn btn-primary" onclick="doTTS()">生成配音 (edge-tts)</button>';
   h += '<button class="btn btn-secondary" onclick="doExtract()">提取配音文本</button></div></div>';
+  
+  // Assembly section
   h += '<div class="card"><h3>3. 装配成品</h3><div class="btn-group">';
-  h += '<button class="btn btn-primary" onclick="doAssemble()">装配最终视频</button></div></div>';
+  h += '<button class="btn btn-primary" onclick="doAssemble()">装配最终视频 (ffmpeg)</button></div></div>';
   
   // Live log
   h += '<div class="card"><h3><span class="live-indicator"></span>实时日志</h3>';
   h += '<div class="log-view" id="live-log" style="max-height:400px"></div>';
-  h += '<div style="margin-top:8px"><button class="btn btn-sm btn-secondary" onclick="connectLogs()">🔗 连接日志流</button>';
-  h += '<button class="btn btn-sm btn-secondary" onclick="clearLogs()">清空</button></div></div>';
+  h += '<button class="btn btn-sm btn-secondary" onclick="connectLogs()">🔗 连接日志</button></div>';
   
   main.innerHTML = h;
   connectLogs();
+}
+
+async function showManimCmds() {
+  const r = await api('GET',`/api/projects/${currentProjectId}/render/manim-cmd`);
+  if(!r.commands) return showToast('暂无脚本','error');
+  
+  let html = '<h3>📋 Manim 渲染命令</h3>';
+  html += `<div style="color:var(--muted);font-size:12px;margin-bottom:8px">在你自己终端（非 Hermes）运行以下命令</div>`;
+  html += `<div style="color:var(--muted);font-size:12px;margin-bottom:12px">项目目录: ${r.project_dir}</div>`;
+  
+  for(const c of r.commands) {
+    html += `<div class="card" style="margin-bottom:8px">`;
+    html += `<strong style="color:var(--green)">${c.file}</strong> → ${c.scenes.join(', ')}`;
+    html += `<div class="log-view" style="margin-top:6px;cursor:pointer" onclick="navigator.clipboard.writeText('${c.cmd_ql.replace(/'/g,"\\'")}');showToast('已复制')">${c.cmd_ql}</div>`;
+    html += '</div>';
+  }
+  
+  const logEl = document.getElementById('live-log');
+  if(logEl) logEl.innerHTML = html;
 }
 
 function connectLogs() {

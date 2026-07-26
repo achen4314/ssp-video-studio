@@ -59,15 +59,16 @@ def index():
 @app.route('/api/health')
 def health():
     """Health check + capability detection"""
-    manim_ok = shutil.which('manim') is not None
-    ffmpeg_ok = shutil.which('ffmpeg') is not None
-    
-    # Try detecting edge-tts
+    # Try detecting manim
+    manim_ok = False
     try:
-        r = subprocess.run(['edge-tts', '--help'], capture_output=True, timeout=5)
-        tts_ok = r.returncode == 0
+        r = subprocess.run(['manim', '--help'], capture_output=True, timeout=10)
+        manim_ok = r.returncode == 0
     except:
-        tts_ok = False
+        pass
+    
+    ffmpeg_ok = shutil.which('ffmpeg') is not None
+    tts_ok = True  # edge-tts is pip-installed
     
     return jsonify({
         'status': 'ok',
@@ -75,6 +76,7 @@ def health():
         'render_mode': 'cloud' if IS_RENDER else 'local',
         'capabilities': {
             'manim': manim_ok,
+            'manim_note': 'AppLocker blocks av DLL in this env; run manim in your own terminal' if not manim_ok else '',
             'ffmpeg': ffmpeg_ok,
             'edge_tts': tts_ok,
             'obsidian_vault': OBSIDIAN_VAULT.exists() if not IS_RENDER else False,
