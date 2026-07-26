@@ -7,7 +7,7 @@ from datetime import datetime
 bp = Blueprint('render', __name__)
 
 from backend.database import get_db, Project, Scene, RenderJob
-from backend.config import PROJECTS_DIR, AI_KEPU_DIR
+from backend.config import PROJECTS_DIR, AI_KEPU_DIR, SCRIPTS_DIR
 from backend.log_stream import emit_log
 
 @bp.route('/api/projects/<int:pid>/render/manim-cmd', methods=['GET'])
@@ -70,7 +70,7 @@ def render_manim(pid):
             if not scene_classes:
                 continue
             
-            cmd = f'cd "{project_dir}" && manim -{quality} {sf.name} {" ".join(scene_classes)}'
+            cmd = f'cd "{project_dir}" && python "{SCRIPTS_DIR / "run_manim.py"}" -{quality} {sf.name} {" ".join(scene_classes)}'
             
             job = RenderJob(project_id=pid, job_type=f'manim_{quality}', command=cmd, status='queued')
             db.add(job)

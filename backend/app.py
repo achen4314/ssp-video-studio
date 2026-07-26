@@ -59,10 +59,11 @@ def index():
 @app.route('/api/health')
 def health():
     """Health check + capability detection"""
-    # Try detecting manim
+    # Try detecting manim via wrapper
     manim_ok = False
     try:
-        r = subprocess.run(['manim', '--help'], capture_output=True, timeout=10)
+        wrapper = SCRIPTS_DIR / 'run_manim.py'
+        r = subprocess.run(['python', str(wrapper), '--help'], capture_output=True, timeout=15)
         manim_ok = r.returncode == 0
     except:
         pass
