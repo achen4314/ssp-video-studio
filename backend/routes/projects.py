@@ -1,7 +1,7 @@
 """Project CRUD routes"""
 from flask import Blueprint, request, jsonify
 from sqlalchemy import desc
-import os, json, re
+import os, json, re, shutil, time
 from pathlib import Path
 
 bp = Blueprint('projects', __name__)
@@ -167,6 +167,166 @@ def score_source(pid):
         return jsonify({'score': result, 'weighted_total': result.get('weighted_total', 0)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    finally:
+        db.close()
+
+@bp.route('/api/projects/<int:pid>/auto-setup', methods=['POST'])
+def auto_setup(pid):
+    """一键自动搭建：读取Obsidian笔记 → 提取章节→生成场景→搜索证据图→评分→生成策划"""
+    db = get_db()
+    try:
+        p = db.query(Project).get(pid)
+        if not p or not p.source_note:
+            return jsonify({'error': 'project has no source note'}), 400
+        
+        # Find source file
+        source_path = None
+        candidates = [
+            OBSIDIAN_VAULT / p.source_note,
+            Path(os.path.expanduser(f'~/Desktop/微信公众号内容/{p.source_note}')),
+        ]
+        for c in candidates:
+            if c.exists():
+                source_path = c
+                break
+        
+        if not source_path:
+            return jsonify({'error': f'source not found: {p.source_note}'}), 404
+        
+        with open(source_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        log = []
+        project_dir = PROJECTS_DIR / p.slug
+        project_dir.mkdir(exist_ok=True)
+        
+        # ==== Step 1: Score ====
+        score = _simple_score(str(source_path))
+        p.source_score = score['weighted_total']
+        log.append(f'✅ 评分: {score["weighted_total"]:.1f}/5 ({score["verdict"]})')
+        
+        # ==== Step 2: Extract chapters → create scenes ====
+        sections = re.findall(r'^#{1,3}\s+(.+)$', content, re.MULTILINE)
+        
+        # Get section content
+        h2_blocks = re.split(r'\n(?=##\s)', content)
+        h2_blocks = [b for b in h2_blocks if b.strip()]
+        
+        # Map chapters to scenes
+        scene_count = 0
+        evidence_dir = project_dir / 'evidence'
+        evidence_dir.mkdir(exist_ok=True)
+        
+        for i, block in enumerate(h2_blocks[:9]):  # Max 9 scenes
+            title_match = re.match(r'^#{1,3}\s+(.+)$', block, re.MULTILINE)
+            if not title_match:
+                continue
+            title = title_match.group(1)[:30]
+            
+            # Extract data points from this section
+            data_pts = re.findall(r'\d+\.?\d*\s*%', block)
+            refs = re.findall(r'\(([A-Z][a-z]+(?:\s+et\s+al\.?)?\s+\d{4}[a-z]?)\)', block)
+            pmids = re.findall(r'PMID:?\s*(\d+)', block)
+            
+            # Create safe scene name
+            safe_title = re.sub(r"[^a-zA-Z0-9\u4e00-\u9fff]+", "", title)[:20]
+            scene_name = f'S{i+1}_{safe_title}'
+            
+            # Extract first 200 chars as narration
+            clean_block = re.sub(r'^#+\s+.+\n', '', block).strip()
+            clean_block = re.sub(r'!\[\[.*?\]\]', '', clean_block)  # remove images
+            narration = clean_block[:300].strip()
+            
+            existing = db.query(Scene).filter_by(project_id=pid, name=scene_name).first()
+            if not existing:
+                s = Scene(
+                    project_id=pid, name=scene_name, scene_number=i+1,
+                    narration_text=narration,
+                    claims_covered=json.dumps([f'S{i+1}_{j:03d}' for j in range(len(data_pts)+len(refs))]),
+                    status='pending'
+                )
+                db.add(s)
+                scene_count += 1
+            
+            log.append(f'  📝 S{i+1}: "{title}" ({len(data_pts)}数据点, {len(refs)}引用)')
+        
+        log.append(f'✅ 场景生成: {scene_count} 个')
+        
+        # ==== Step 3: Extract evidence from note images ====
+        vault_images = re.findall(r'!\[\[(.*?)\]\]', content)
+        evidence_count = 0
+        images_dir = Path(os.path.expanduser('~/Desktop/微信公众号内容/images'))
+        
+        for img_rel in vault_images:
+            img_path = images_dir / img_rel
+            if img_path.exists():
+                dst = evidence_dir / img_path.name
+                shutil.copy2(img_path, dst)
+                
+                try:
+                    from PIL import Image
+                    img = Image.open(dst)
+                    w, h = img.size
+                    grade = 'A' if w >= 1200 else ('B' if w >= 800 else 'C')
+                except:
+                    w, h = 0, 0
+                    grade = '?'
+                
+                e = Evidence(
+                    project_id=pid, filename=img_path.name,
+                    original_path=str(dst),
+                    resolution=f'{w}×{h}' if w else 'unknown',
+                    size_kb=round(dst.stat().st_size/1024, 1),
+                    grade=grade, status='ready'
+                )
+                db.add(e)
+                evidence_count += 1
+                log.append(f'  🖼️ {img_path.name} ({grade}级)')
+        
+        log.append(f'✅ 证据图导入: {evidence_count} 张（来自笔记嵌入图片）')
+        
+        # ==== Step 4: Generate basic plan.md ====
+        plan = f"""# {p.name} — 自动生成策划
+
+## 基本信息
+- 源笔记: {p.source_note}
+- 源评分: {score['weighted_total']:.1f}/5
+- 场景数: {scene_count}
+- 证据图: {evidence_count} 张
+
+## 叙事结构
+"""
+        for i in range(scene_count):
+            if i == 0:
+                role = '钩子 — 核心判断与定位'
+            elif i < 3:
+                role = '机制 — 科学原理深度拆解'
+            elif i < scene_count - 2:
+                role = '证据 — 关键研究数据分析'
+            elif i < scene_count - 1:
+                role = '应用 — 实战场景映射'
+            else:
+                role = '收尾 — 结论与建议'
+            plan += f"{i+1}. S{i+1}: {role}\n"
+        
+        p.plan_md = plan
+        p.status = 'planning'
+        p.progress = 20
+        
+        db.commit()
+        log.append(f'✅ 策划书已生成')
+        log.append(f'🏁 自动搭建完成！状态: 策划中 → 下一步: 生成脚本')
+        
+        return jsonify({
+            'status': 'done',
+            'scenes_created': scene_count,
+            'evidence_imported': evidence_count,
+            'source_score': score['weighted_total'],
+            'log': log,
+        })
+    except Exception as e:
+        db.rollback()
+        return jsonify({'error': str(e), 'log': log if 'log' in dir() else []}), 500
     finally:
         db.close()
 

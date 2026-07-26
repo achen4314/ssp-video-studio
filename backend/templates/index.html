@@ -177,19 +177,125 @@ async function delProject(pid) { if(confirm('确认删除?')){await api('DELETE'
 function showNewProject() {
   const m = document.getElementById('main-content');
   m.innerHTML = `
-    <h2 style="color:var(--green);margin-bottom:20px">+ 新建项目</h2>
-    <div class="card">
-      <div class="form-group"><label>项目名称</label><input id="np-name" placeholder="如：β-丙氨酸循证综述"></div>
-      <div class="form-group"><label>Obsidian 笔记路径（相对 vault）</label><input id="np-source" placeholder="如：运动营养/β-丙氨酸/β-丙氨酸与运动表现.md"></div>
-      <button class="btn btn-primary" onclick="createProject()">创建</button>
-    </div>`;
+    <h2 style="color:var(--green);margin-bottom:16px">+ 新建项目 — 从知识库选择源材料</h2>
+    <div class="card"><div class="form-group"><label>项目名称（可自动填充）</label><input id="np-name" placeholder="选择笔记后自动填充..."></div></div>
+    <div id="vault-picker"><div style="color:var(--muted)">加载知识库...</div></div>`;
+  loadVaultPicker();
 }
-async function createProject() {
-  const name = document.getElementById('np-name').value.trim();
-  const src = document.getElementById('np-source').value.trim();
-  if(!name) return showToast('请输入名称','error');
-  const r = await api('POST','/api/projects',{name,source_note:src});
-  if(r.id){ showToast(`项目 "${r.name}" 已创建`); currentProjectId=r.id; showPage('project'); }
+
+async function loadVaultPicker(category='') {
+  const el = document.getElementById('vault-picker');
+  el.innerHTML = '<div style="color:var(--muted)">加载中...</div>';
+  try {
+    const vi = await api('GET','/api/obsidian/vault-info');
+    if(vi.error){ el.innerHTML=`<div class="card" style="color:var(--danger)">${vi.error}</div>`; return; }
+    
+    let h = '<div class="stat-box" style="margin-bottom:12px"><div class="label">📁 知识库</div><div class="value" style="font-size:14px">'+vi.path+'</div></div>';
+    
+    // Category tabs
+    h += '<div class="btn-group" style="margin-bottom:12px">';
+    const allActive = category===''?'btn-primary':'btn-secondary';
+    h += `<button class="btn btn-sm ${allActive}" onclick="loadVaultPicker('')">📂 全部</button>`;
+    for(const d of (vi.content_dirs||[])) {
+      if(d==='images'||d==='hermes-kb'||d==='scripts'||d==='templates'||d==='drafts'||d==='published'||d==='微信记忆'||d==='research') continue;
+      const active = category===d?'btn-primary':'btn-secondary';
+      h += `<button class="btn btn-sm ${active}" onclick="loadVaultPicker('${d}')">${d}</button>`;
+    }
+    h += '</div>';
+    
+    // Load notes
+    const notesUrl = category ? `/api/obsidian/notes?category=${category}` : '/api/obsidian/notes';
+    const d = await api('GET', notesUrl);
+    
+    if(!d.notes||!d.notes.length) {
+      h += '<div class="card" style="text-align:center;padding:30px;color:var(--muted)">该分类下暂无笔记</div>';
+    } else {
+      // Filter to only content notes (>3KB), sort by score potential
+      const notes = d.notes.filter(n=>n.size_kb>2).sort((a,b)=>b.size_kb-a.size_kb);
+      h += `<div style="color:var(--muted);margin-bottom:8px">📝 ${notes.length} 篇笔记（已过滤<3KB草稿）</div>`;
+      h += '<div style="max-height:500px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm)"><table><thead><tr><th style="width:45%">笔记</th><th>大小</th><th>评分预估</th><th>引用/图</th><th>选择</th></tr></thead><tbody>';
+      
+      for(const n of notes) {
+        // Quick score estimation
+        const estScore = Math.min(5, (n.size_kb/10 + n.references/3 + n.embedded_images + n.data_points/4) / 3);
+        const scoreColor = estScore>=3.5?'var(--green)':estScore>=2.5?'var(--gold)':'var(--muted)';
+        const stars = '★'.repeat(Math.round(estScore))+'☆'.repeat(5-Math.round(estScore));
+        
+        h += `<tr style="cursor:pointer" onclick="selectVaultNote('${n.name.replace(/'/g,"\\'")}','${n.path.replace(/'/g,"\\'")}')" 
+          onmouseover="this.style.background='rgba(182,218,69,0.05)'" onmouseout="this.style.background=''">
+          <td>
+            <strong>${n.name}</strong>
+            <br><span style="font-size:11px;color:var(--muted)">${n.path}</span>
+          </td>
+          <td>${n.size_kb}KB</td>
+          <td><span style="color:${scoreColor};font-size:16px">${stars}</span></td>
+          <td>${n.references}引/${n.embedded_images}图 · ${n.data_points}数据</td>
+          <td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();selectVaultNote('${n.name.replace(/'/g,"\\'")}','${n.path.replace(/'/g,"\\'")}')">选择</button></td>
+        </tr>`;
+      }
+      h += '</tbody></table></div>';
+    }
+    
+    el.innerHTML = h;
+  } catch(e) { el.innerHTML = `<div class="card" style="color:var(--danger)">${e.message}</div>`; }
+}
+
+async function selectVaultNote(name, path) {
+  // Auto-fill project name
+  document.getElementById('np-name').value = name;
+  document.getElementById('np-name').style.borderColor = 'var(--green)';
+  
+  // Score it and show details
+  const score = await api('POST','/api/obsidian/score',{path});
+  
+  // Highlight the selected row and show score details
+  const el = document.getElementById('vault-picker');
+  const verdictColor = score.weighted_total>=3.5?'var(--green)':score.weighted_total>=2.5?'var(--gold)':'var(--danger)';
+  
+  const detailHtml = `
+    <div class="card" style="border-color:var(--green);margin-top:12px">
+      <h3>✅ 已选择: ${name}</h3>
+      <div style="color:var(--muted);font-size:12px;margin-bottom:8px">${path}</div>
+      <div class="stat-row">
+        <div class="stat-box"><div class="label">综合评分</div><div class="value" style="color:${verdictColor}">${score.weighted_total.toFixed(1)}</div></div>
+        <div class="stat-box"><div class="label">判定</div><div class="value" style="font-size:14px;color:${verdictColor}">${score.verdict}</div></div>
+      </div>
+      <table style="margin-top:8px">
+        <tr><td>完整性</td><td>${'★'.repeat(score.scores?.completeness||0)}</td><td>${score.size_kb}KB · ${score.h2_sections}章</td></tr>
+        <tr><td>证据力</td><td>${'★'.repeat(score.scores?.evidence||0)}</td><td>${score.references}引用 · ${score.embedded_images}图</td></tr>
+        <tr><td>数据密度</td><td>${'★'.repeat(score.scores?.data_density||0)}</td><td>${score.data_points}个数据点</td></tr>
+      </table>
+      <div class="btn-group" style="margin-top:12px">
+        <button class="btn btn-primary" onclick="createFromPicker('${name.replace(/'/g,"\\'")}','${path.replace(/'/g,"\\'")}')">🎬 创建视频项目</button>
+        <button class="btn btn-secondary" onclick="loadVaultPicker()">↩ 重新选择</button>
+      </div>
+    </div>`;
+  
+  // Insert after the table
+  const tableEl = el.querySelector('div[style*="max-height"]');
+  if(tableEl) {
+    // Remove old detail if exists
+    const oldDetail = el.querySelector('.card[style*="border-color"]');
+    if(oldDetail) oldDetail.remove();
+    tableEl.insertAdjacentHTML('afterend', detailHtml);
+  }
+  
+  showToast(`已选择: ${name} (评分 ${score.weighted_total.toFixed(1)})`);
+}
+
+async function createFromPicker(name, path) {
+  const projName = document.getElementById('np-name').value.trim() || name;
+  const r = await api('POST','/api/projects',{name:projName, source_note:path});
+  if(r.id){ 
+    showToast(`项目已创建，正在自动搭建...`);
+    currentProjectId = r.id;
+    // Auto setup
+    const setup = await api('POST',`/api/projects/${r.id}/auto-setup`,{});
+    if(setup.status==='done'){
+      showToast(`✅ 自动搭建完成: ${setup.scenes_created}场景, ${setup.evidence_imported}张证据图`);
+    }
+    showPage('project'); 
+  }
 }
 
 // ═══════════════ VAULT ═══════════════
@@ -228,7 +334,13 @@ async function loadNotes(cat) {
 }
 async function createFromVault(name, path) {
   const r = await api('POST','/api/projects',{name,source_note:path});
-  if(r.id){ showToast(`项目已创建`); currentProjectId=r.id; showPage('project'); }
+  if(r.id){ 
+    currentProjectId=r.id; 
+    showToast('正在自动搭建...');
+    const setup = await api('POST',`/api/projects/${r.id}/auto-setup`,{});
+    showToast(`✅ ${setup.scenes_created||0}场景, ${setup.evidence_imported||0}证据图`);
+    showPage('project'); 
+  }
 }
 async function scoreVault(path) {
   const r = await api('POST','/api/obsidian/score',{path});
@@ -260,7 +372,8 @@ async function loadProject(main) {
       </div>
       <div class="card"><h3>📋 操作</h3>
         <div class="btn-group">
-          <button class="btn btn-primary" onclick="scoreProject()">评分源材料</button>
+          <button class="btn btn-primary" onclick="autoSetup()">🚀 一键搭建（读笔记→建场景→导证据）</button>
+          <button class="btn btn-secondary" onclick="scoreProject()">评分源材料</button>
           <button class="btn btn-secondary" onclick="importEvidence()">导入证据图</button>
           <button class="btn btn-secondary" onclick="checkEvidence()">检测证据图</button>
         </div>
@@ -297,6 +410,19 @@ async function scoreProject() {
   const r = await api('POST',`/api/projects/${currentProjectId}/score-source`,{});
   showToast(`评分: ${r.weighted_total?.toFixed(1)||'?'}`);
   loadPage('project');
+}
+async function autoSetup() {
+  if(!currentProjectId) return;
+  showToast('正在自动搭建...');
+  const r = await api('POST',`/api/projects/${currentProjectId}/auto-setup`,{});
+  if(r.status==='done'){
+    showToast(`✅ ${r.scenes_created}场景, ${r.evidence_imported}张证据图`);
+    // Show log
+    if(r.log) console.log(r.log.join('\n'));
+    loadPage('project');
+  } else {
+    showToast('搭建失败: '+(r.error||'unknown'),'error');
+  }
 }
 async function importEvidence() {
   const imgs = prompt('输入图片路径（相对 vault images/，逗号分隔）:');
