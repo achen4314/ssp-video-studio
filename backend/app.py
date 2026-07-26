@@ -5,7 +5,7 @@ SSP Video Studio — AI运动科学科普视频本地/云端生产平台
 本地: python backend/app.py          → http://127.0.0.1:5199
 云端: gunicorn backend.app:app        → Render 自动分配端口
 """
-import os, sys, json, threading, time, subprocess, shutil, re, queue
+import os, sys, json, threading, time, subprocess, shutil, re
 from datetime import datetime
 from pathlib import Path
 
@@ -30,28 +30,7 @@ from backend.config import (
     BASE_DIR, DATA_DIR, PROJECTS_DIR, SCRIPTS_DIR,
     OBSIDIAN_VAULT, AI_KEPU_DIR, IS_RENDER
 )
-
-# ═══════════════════════════════════
-# SSE Log Stream (real-time render logs)
-# ═══════════════════════════════════
-_log_streams = {}  # project_id → list of queues
-
-def get_log_stream(project_id):
-    if project_id not in _log_streams:
-        _log_streams[project_id] = queue.Queue()
-    return _log_streams[project_id]
-
-def emit_log(project_id, message, level='info'):
-    """Push a log message to the SSE stream"""
-    if project_id in _log_streams:
-        try:
-            _log_streams[project_id].put_nowait({
-                'time': datetime.now().strftime('%H:%M:%S'),
-                'level': level,
-                'message': message,
-            })
-        except queue.Full:
-            pass
+from backend.log_stream import get_log_stream, emit_log
 
 # ═══════════════════════════════════
 # Register blueprints

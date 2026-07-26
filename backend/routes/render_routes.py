@@ -8,7 +8,7 @@ bp = Blueprint('render', __name__)
 
 from backend.database import get_db, Project, Scene, RenderJob
 from backend.config import PROJECTS_DIR, AI_KEPU_DIR
-from backend.app import emit_log
+from backend.log_stream import emit_log
 
 @bp.route('/api/projects/<int:pid>/render/manim', methods=['POST'])
 def render_manim(pid):
