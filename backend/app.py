@@ -138,4 +138,4 @@ if __name__ == '__main__':
     print(f"  项目: {PROJECTS_DIR}")
     print(f"  知识库: {OBSIDIAN_VAULT} ({'✓' if OBSIDIAN_VAULT.exists() else '✗ 不可用'})")
     print(f"\n  按 Ctrl+C 停止\n")
-    app.run(host='0.0.0.0', port=port, debug=debug, threaded=True)
+    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)

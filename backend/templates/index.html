@@ -373,6 +373,7 @@ async function loadProject(main) {
       <div class="card"><h3>📋 操作</h3>
         <div class="btn-group">
           <button class="btn btn-primary" onclick="autoSetup()">🚀 一键搭建（读笔记→建场景→导证据）</button>
+          <button class="btn btn-primary" onclick="generateScripts()">📝 生成脚本（→可渲染）</button>
           <button class="btn btn-secondary" onclick="scoreProject()">评分源材料</button>
           <button class="btn btn-secondary" onclick="importEvidence()">导入证据图</button>
           <button class="btn btn-secondary" onclick="checkEvidence()">检测证据图</button>
@@ -417,11 +418,22 @@ async function autoSetup() {
   const r = await api('POST',`/api/projects/${currentProjectId}/auto-setup`,{});
   if(r.status==='done'){
     showToast(`✅ ${r.scenes_created}场景, ${r.evidence_imported}张证据图`);
-    // Show log
-    if(r.log) console.log(r.log.join('\n'));
     loadPage('project');
+    // Auto-generate scripts
+    generateScripts(true);
   } else {
     showToast('搭建失败: '+(r.error||'unknown'),'error');
+  }
+}
+async function generateScripts(silent=false) {
+  if(!currentProjectId) return;
+  if(!silent) showToast('正在生成脚本...');
+  const r = await api('POST',`/api/projects/${currentProjectId}/scenes/generate-scripts`,{});
+  if(r.files_created){
+    showToast(`✅ 脚本已生成: ${r.files_created.join(', ')}`);
+    loadPage('project');
+  } else {
+    showToast('脚本生成失败: '+(r.error||'unknown'),'error');
   }
 }
 async function importEvidence() {
