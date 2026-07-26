@@ -116,6 +116,13 @@ function showToast(msg, type='success') {
   setTimeout(() => t.remove(), 3500);
 }
 function showPage(page) {
+  // Close SSE when leaving render page
+  if(logEventSource && page !== 'render') {
+    logEventSource.close();
+    logEventSource = null;
+    const el = document.getElementById('live-log');
+    if(el) el.dataset.connected = 'false';
+  }
   document.querySelectorAll('.sidebar nav a').forEach(a => a.classList.remove('active'));
   document.querySelector(`[onclick="showPage('${page}')"]`)?.classList.add('active');
   loadPage(page);
@@ -554,19 +561,49 @@ async function showManimCmds() {
 }
 
 function connectLogs() {
-  if(logEventSource) logEventSource.close();
+  if(logEventSource) {
+    logEventSource.close();
+    logEventSource = null;
+  }
   const el = document.getElementById('live-log');
-  logEventSource = new EventSource(`/api/projects/${currentProjectId}/logs/stream`);
-  logEventSource.onmessage = (e) => {
-    try {
-      const msg = JSON.parse(e.data);
-      if(!msg.message) return;
-      const cls = msg.level === 'error' ? 'log-error' : (msg.level === 'warn' ? 'log-warn' : 'log-info');
-      el.innerHTML += `<div class="${cls}">[${msg.time}] ${msg.message}</div>`;
-      el.scrollTop = el.scrollHeight;
-    } catch(ex) {}
-  };
-  logEventSource.onerror = () => { el.innerHTML += '<div class="log-warn">⚠️ 日志流断开，5秒后重连...</div>'; setTimeout(connectLogs,5000); };
+  if(!el) return;  // not on render page
+  if(el.dataset.connected === 'true') return;  // already connected
+  el.dataset.connected = 'true';
+  
+  let reconnectTimer = null;
+  
+  function doConnect() {
+    if(logEventSource) logEventSource.close();
+    
+    logEventSource = new EventSource(`/api/projects/${currentProjectId}/logs/stream`);
+    let receivedData = false;
+    
+    logEventSource.onmessage = (e) => {
+      receivedData = true;
+      try {
+        const msg = JSON.parse(e.data);
+        if(!msg.message) return;
+        const cls = msg.level === 'error' ? 'log-error' : (msg.level === 'warn' ? 'log-warn' : 'log-info');
+        el.innerHTML += `<div class="${cls}">[${msg.time}] ${msg.message}</div>`;
+        el.scrollTop = el.scrollHeight;
+      } catch(ex) {}
+    };
+    
+    logEventSource.onerror = () => {
+      logEventSource.close();
+      logEventSource = null;
+      if(!receivedData) {
+        // Never connected — retry once quickly
+        setTimeout(doConnect, 2000);
+        receivedData = true; // prevent loop
+      } else {
+        if(reconnectTimer) clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(doConnect, 5000);
+      }
+    };
+  }
+  
+  doConnect();
 }
 
 function clearLogs() { document.getElementById('live-log').innerHTML = ''; }
