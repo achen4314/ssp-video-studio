@@ -59,14 +59,9 @@ def index():
 @app.route('/api/health')
 def health():
     """Health check + capability detection"""
-    # Try detecting manim via wrapper
-    manim_ok = False
-    try:
-        wrapper = SCRIPTS_DIR / 'run_manim.py'
-        r = subprocess.run(['python', str(wrapper), '--help'], capture_output=True, timeout=15)
-        manim_ok = r.returncode == 0
-    except:
-        pass
+    # Check manim availability via wrapper script existence
+    wrapper = SCRIPTS_DIR / 'run_manim.py'
+    manim_ok = wrapper.exists() and shutil.which('ffmpeg') is not None
     
     ffmpeg_ok = shutil.which('ffmpeg') is not None
     tts_ok = True  # edge-tts is pip-installed
