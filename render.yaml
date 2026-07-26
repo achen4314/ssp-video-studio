@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: ssp-video-studio
+    env: python
+    region: oregon
+    buildCommand: |
+      apt-get update -qq && apt-get install -y -qq ffmpeg texlive texlive-latex-extra texlive-fonts-recommended texlive-lang-chinese cmake
+      pip install -r requirements.txt
+    startCommand: gunicorn backend.app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 300 --preload
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATA_DIR
+        value: /opt/render/project/data
+      - key: RENDER
+        value: "true"
+    plan: free
+    autoDeploy: true

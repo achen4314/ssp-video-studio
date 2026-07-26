@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SSP Video Studio — AI运动科学科普视频平台</title>
+<style>
+:root {
+  --bg: #14231f; --bg-card: #1a3535; --bg-input: #0d1a18;
+  --green: #b6da45; --gold: #c0c060; --text: #e8eddf; --muted: #809090;
+  --danger: #e05555; --border: #2a4038; --radius: 10px; --radius-sm: 6px;
+  --font: 'Microsoft YaHei','PingFang SC',sans-serif; --mono: 'Consolas','Cascadia Code',monospace;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:var(--font); font-size:14px; min-height:100vh; }
+a { color:var(--green); text-decoration:none; }
+.app { display:flex; height:100vh; }
+.sidebar { width:220px; background:var(--bg-card); border-right:1px solid var(--border); padding:16px 0; display:flex; flex-direction:column; }
+.sidebar .logo { padding:0 16px 16px; border-bottom:1px solid var(--border); margin-bottom:8px; }
+.sidebar .logo h1 { font-size:18px; color:var(--green); font-weight:700; }
+.sidebar .logo .sub { font-size:11px; color:var(--muted); margin-top:2px; }
+.sidebar nav a { display:block; padding:10px 16px; color:var(--muted); font-size:13px; transition:all .2s; border-left:3px solid transparent; cursor:pointer; }
+.sidebar nav a:hover, .sidebar nav a.active { color:var(--green); background:rgba(182,218,69,0.06); border-left-color:var(--green); }
+.main { flex:1; overflow-y:auto; padding:24px 32px; }
+.page { display:none; }
+.page.active { display:block; }
+.card { background:var(--bg-card); border-radius:var(--radius); border:1px solid var(--border); padding:20px; margin-bottom:16px; }
+.card h2 { font-size:16px; color:var(--green); margin-bottom:12px; }
+.card h3 { font-size:14px; color:var(--gold); margin-bottom:8px; }
+.stat-row { display:flex; gap:16px; margin-bottom:20px; flex-wrap:wrap; }
+.stat-box { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:16px 20px; flex:1; min-width:140px; }
+.stat-box .label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
+.stat-box .value { font-size:28px; font-weight:300; color:var(--green); margin-top:4px; }
+.btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:var(--radius-sm); font-size:13px; font-weight:600; cursor:pointer; border:none; transition:all .2s; font-family:var(--font); }
+.btn-primary { background:var(--green); color:var(--bg); }
+.btn-primary:hover { filter:brightness(1.15); }
+.btn-secondary { background:transparent; color:var(--green); border:1px solid var(--green); }
+.btn-secondary:hover { background:rgba(182,218,69,0.08); }
+.btn-danger { background:transparent; color:var(--danger); border:1px solid var(--danger); }
+.btn-sm { padding:5px 10px; font-size:12px; }
+.btn:disabled { opacity:0.4; cursor:not-allowed; }
+.btn-group { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; }
+input, textarea, select { background:var(--bg-input); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); padding:8px 12px; font-size:13px; font-family:var(--font); width:100%; }
+input:focus, textarea:focus, select:focus { outline:none; border-color:var(--green); }
+.form-group { margin-bottom:12px; }
+.form-group label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th, td { padding:8px 12px; text-align:left; border-bottom:1px solid var(--border); }
+th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; }
+tr:hover { background:rgba(182,218,69,0.03); }
+.badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+.badge-green { background:rgba(182,218,69,0.15); color:var(--green); }
+.badge-gold { background:rgba(192,192,96,0.15); color:var(--gold); }
+.badge-muted { background:rgba(128,144,144,0.15); color:var(--muted); }
+.badge-danger { background:rgba(224,85,85,0.15); color:var(--danger); }
+.progress-bar { height:8px; background:var(--bg-input); border-radius:4px; overflow:hidden; margin:8px 0; }
+.progress-fill { height:100%; background:var(--green); border-radius:4px; transition:width .3s; }
+.log-view { background:var(--bg-input); border-radius:var(--radius-sm); padding:12px; font-family:var(--mono); font-size:12px; max-height:300px; overflow-y:auto; white-space:pre-wrap; color:var(--muted); margin:8px 0; }
+.log-view .log-info { color:var(--text); }
+.log-view .log-warn { color:var(--gold); }
+.log-view .log-error { color:var(--danger); }
+.log-view .log-success { color:var(--green); }
+.evidence-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; }
+.evidence-card { background:var(--bg-input); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px; text-align:center; }
+.evidence-card .filename { font-size:12px; word-break:break-all; }
+.evidence-card .meta { font-size:11px; color:var(--muted); margin-top:4px; }
+.pipeline { display:flex; align-items:center; gap:4px; flex-wrap:wrap; margin:16px 0; }
+.pipeline-step { padding:8px 14px; border-radius:20px; font-size:12px; font-weight:600; background:var(--bg-input); color:var(--muted); border:1px solid var(--border); white-space:nowrap; }
+.pipeline-step.active { background:rgba(182,218,69,0.12); color:var(--green); border-color:var(--green); }
+.pipeline-step.done { background:rgba(192,192,96,0.1); color:var(--gold); border-color:var(--gold); }
+.pipeline-arrow { color:var(--border); font-size:16px; }
+.toast { position:fixed; bottom:24px; right:24px; padding:12px 20px; border-radius:var(--radius-sm); color:#fff; font-size:13px; z-index:200; animation:slideUp 0.3s ease; }
+.toast.success { background:#2d6a4f; }
+.toast.error { background:var(--danger); }
+@keyframes slideUp { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
+.live-indicator { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--green); margin-right:6px; animation:pulse 1.5s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="logo">
+      <h1>🎬 Video Studio</h1>
+      <div class="sub">SSP 运动科学 · 循证科普视频</div>
+    </div>
+    <nav>
+      <a class="active" onclick="showPage('dashboard')">📊 项目总览</a>
+      <a onclick="showPage('vault')">📚 知识库</a>
+      <a onclick="showPage('project')">🎯 当前项目</a>
+      <a onclick="showPage('evidence')">🖼️ 证据管理</a>
+      <a onclick="showPage('render')">⚡ 渲染中心</a>
+      <a onclick="showPage('qc')">✅ 质量验收</a>
+    </nav>
+  </aside>
+  <main class="main" id="main-content"></main>
+</div>
+
+<script>
+const API = '';
+let currentProjectId = null;
+let logEventSource = null;
+
+async function api(method, url, body) {
+  const opts = { method, headers: {'Content-Type':'application/json'} };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(API + url, opts);
+  return r.json();
+}
+function showToast(msg, type='success') {
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+function showPage(page) {
+  document.querySelectorAll('.sidebar nav a').forEach(a => a.classList.remove('active'));
+  document.querySelector(`[onclick="showPage('${page}')"]`)?.classList.add('active');
+  loadPage(page);
+}
+function loadPage(page) {
+  const main = document.getElementById('main-content');
+  main.innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted)">加载中...</div>';
+  switch(page) {
+    case 'dashboard': loadDashboard(main); break;
+    case 'vault': loadVault(main); break;
+    case 'project': loadProject(main); break;
+    case 'evidence': loadEvidence(main); break;
+    case 'render': loadRender(main); break;
+    case 'qc': loadQC(main); break;
+  }
+}
+
+// ═══════════════ DASHBOARD ═══════════════
+async function loadDashboard(main) {
+  let h = '<h2 style="color:var(--green);margin-bottom:20px">📊 项目总览</h2>';
+  try {
+    const projects = await api('GET', '/api/projects');
+    const done = projects.filter(p => p.status === 'done').length;
+    const active = projects.filter(p => !['done','draft'].includes(p.status)).length;
+    h += '<div class="stat-row">';
+    h += `<div class="stat-box"><div class="label">项目总数</div><div class="value">${projects.length}</div></div>`;
+    h += `<div class="stat-box"><div class="label">进行中</div><div class="value">${active}</div></div>`;
+    h += `<div class="stat-box"><div class="label">已完成</div><div class="value">${done}</div></div>`;
+    h += '</div>';
+    h += '<div class="btn-group"><button class="btn btn-primary" onclick="showNewProject()">+ 新建项目</button></div>';
+    
+    if (!projects.length) {
+      h += '<div class="card" style="text-align:center;padding:40px;color:var(--muted)">暂无项目 — 从知识库创建第一个视频项目</div>';
+    } else {
+      h += '<table><thead><tr><th>项目</th><th>源材料</th><th>评分</th><th>进度</th><th>状态</th><th>操作</th></tr></thead><tbody>';
+      for (const p of projects) {
+        const st = {draft:'草稿',planning:'策划',scripting:'脚本',rendering:'渲染',tts:'配音',assembling:'装配',qc:'验收',done:'完成'}[p.status]||p.status;
+        const sb = p.status==='done'?'badge-green':(p.status==='draft'?'badge-muted':'badge-gold');
+        h += `<tr>
+          <td><strong>${p.name}</strong></td>
+          <td style="font-size:12px;color:var(--muted)">${p.source_note||'-'}</td>
+          <td>${p.source_score?`<span class="badge ${p.source_score>=3.5?'badge-green':'badge-gold'}">${p.source_score.toFixed(1)}</span>`:'-'}</td>
+          <td><div class="progress-bar"><div class="progress-fill" style="width:${p.progress||0}%"></div></div></td>
+          <td><span class="badge ${sb}">${st}</span></td>
+          <td>
+            <button class="btn btn-sm btn-secondary" onclick="openProject(${p.id})">打开</button>
+            <button class="btn btn-sm btn-danger" onclick="delProject(${p.id})">删除</button>
+          </td></tr>`;
+      }
+      h += '</tbody></table>';
+    }
+  } catch(e) { h += `<div class="card" style="color:var(--danger)">${e.message}</div>`; }
+  main.innerHTML = h;
+}
+
+async function openProject(pid) { currentProjectId = pid; showPage('project'); }
+async function delProject(pid) { if(confirm('确认删除?')){await api('DELETE',`/api/projects/${pid}`);showToast('已删除');loadPage('dashboard');}}
+
+function showNewProject() {
+  const m = document.getElementById('main-content');
+  m.innerHTML = `
+    <h2 style="color:var(--green);margin-bottom:20px">+ 新建项目</h2>
+    <div class="card">
+      <div class="form-group"><label>项目名称</label><input id="np-name" placeholder="如：β-丙氨酸循证综述"></div>
+      <div class="form-group"><label>Obsidian 笔记路径（相对 vault）</label><input id="np-source" placeholder="如：运动营养/β-丙氨酸/β-丙氨酸与运动表现.md"></div>
+      <button class="btn btn-primary" onclick="createProject()">创建</button>
+    </div>`;
+}
+async function createProject() {
+  const name = document.getElementById('np-name').value.trim();
+  const src = document.getElementById('np-source').value.trim();
+  if(!name) return showToast('请输入名称','error');
+  const r = await api('POST','/api/projects',{name,source_note:src});
+  if(r.id){ showToast(`项目 "${r.name}" 已创建`); currentProjectId=r.id; showPage('project'); }
+}
+
+// ═══════════════ VAULT ═══════════════
+async function loadVault(main) {
+  let h = '<h2 style="color:var(--green);margin-bottom:20px">📚 Obsidian 知识库</h2>';
+  try {
+    const vi = await api('GET','/api/obsidian/vault-info');
+    if(vi.error){ h+=`<div class="card" style="color:var(--danger)">知识库不可用: ${vi.error}</div>`; main.innerHTML=h; return; }
+    h += `<div class="card"><strong>📁 ${vi.path}</strong> — ${vi.content_dirs?.length||0} 个目录</div>`;
+    h += '<div class="btn-group">';
+    h += '<button class="btn btn-sm btn-secondary" onclick="loadNotes(\'\')">全部</button>';
+    (vi.content_dirs||[]).forEach(d => h+=`<button class="btn btn-sm btn-secondary" onclick="loadNotes('${d}')">${d}</button>`);
+    h += '</div><div id="notes-list"><div style="color:var(--muted)">选择分类查看...</div></div>';
+  } catch(e) { h+=`<div class="card" style="color:var(--danger)">${e.message}</div>`; }
+  main.innerHTML = h;
+}
+async function loadNotes(cat) {
+  const el = document.getElementById('notes-list');
+  el.innerHTML = '<div style="color:var(--muted)">加载中...</div>';
+  try {
+    const d = await api('GET',`/api/obsidian/notes?category=${cat}`);
+    let h = `<div style="color:var(--muted);margin-bottom:8px">${d.count} 篇</div><table><thead><tr><th>笔记</th><th>大小</th><th>章节</th><th>引用/图</th><th>操作</th></tr></thead><tbody>`;
+    for(const n of d.notes) {
+      h += `<tr>
+        <td><strong>${n.name}</strong><br><span style="font-size:11px;color:var(--muted)">${n.path}</span></td>
+        <td>${n.size_kb}KB</td><td>${n.h2_sections}章</td>
+        <td>${n.references}引/${n.embedded_images}图</td>
+        <td>
+          <button class="btn btn-sm btn-primary" onclick="createFromVault('${n.name}','${n.path}')">创建项目</button>
+          <button class="btn btn-sm btn-secondary" onclick="scoreVault('${n.path}')">评分</button>
+        </td></tr>`;
+    }
+    h += '</tbody></table>';
+    el.innerHTML = h;
+  } catch(e) { el.innerHTML = `<div style="color:var(--danger)">${e.message}</div>`; }
+}
+async function createFromVault(name, path) {
+  const r = await api('POST','/api/projects',{name,source_note:path});
+  if(r.id){ showToast(`项目已创建`); currentProjectId=r.id; showPage('project'); }
+}
+async function scoreVault(path) {
+  const r = await api('POST','/api/obsidian/score',{path});
+  showToast(`评分: ${r.weighted_total?.toFixed(1)} — ${r.verdict}`);
+}
+
+// ═══════════════ PROJECT ═══════════════
+async function loadProject(main) {
+  if(!currentProjectId){ main.innerHTML='<div class="card" style="text-align:center;padding:40px;color:var(--muted)">请先选择项目</div>'; return; }
+  try {
+    const p = await api('GET',`/api/projects/${currentProjectId}`);
+    const steps = ['draft','planning','scripting','rendering','tts','assembling','qc','done'];
+    const labels = {draft:'草稿',planning:'策划',scripting:'脚本',rendering:'渲染',tts:'配音',assembling:'装配',qc:'验收',done:'完成'};
+    const idx = steps.indexOf(p.status);
+    const pipe = steps.map((s,i)=>{
+      let cls = 'pipeline-step';
+      if(i<idx) cls+=' done'; if(i===idx) cls+=' active';
+      return `<span class="${cls}">${i+1}. ${labels[s]}</span>`;
+    }).join('<span class="pipeline-arrow">→</span>');
+    
+    let h = `<h2 style="color:var(--green);margin-bottom:20px">🎯 ${p.name}</h2>
+      <div class="pipeline">${pipe}</div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${p.progress||0}%"></div></div>
+      <div class="stat-row">
+        <div class="stat-box"><div class="label">评分</div><div class="value">${p.source_score?.toFixed(1)||'-'}</div></div>
+        <div class="stat-box"><div class="label">场景</div><div class="value">${p.scenes?.length||0}</div></div>
+        <div class="stat-box"><div class="label">证据图</div><div class="value">${p.evidence_items?.length||0}</div></div>
+        <div class="stat-box"><div class="label">状态</div><div class="value" style="font-size:16px">${labels[p.status]||p.status}</div></div>
+      </div>
+      <div class="card"><h3>📋 操作</h3>
+        <div class="btn-group">
+          <button class="btn btn-primary" onclick="scoreProject()">评分源材料</button>
+          <button class="btn btn-secondary" onclick="importEvidence()">导入证据图</button>
+          <button class="btn btn-secondary" onclick="checkEvidence()">检测证据图</button>
+        </div>
+      </div>
+      <div class="card"><h3>🎬 场景</h3>
+        ${!p.scenes?.length?'<div style="color:var(--muted)">尚无场景</div>':
+          '<table><tr><th>#</th><th>名称</th><th>状态</th><th>配音</th></tr>'+
+          p.scenes.map(s=>`<tr><td>${s.scene_number}</td><td>${s.name}</td>
+            <td><span class="badge ${s.status==='ready'?'badge-green':'badge-muted'}">${s.status}</span></td>
+            <td>${s.narration_text?'✅':'❌'}</td></tr>`).join('')+'</table>'}
+      </div>
+      <div class="card"><h3>🖼️ 证据图</h3>
+        ${!p.evidence_items?.length?'<div style="color:var(--muted)">尚无证据图</div>':
+          '<div class="evidence-grid">'+p.evidence_items.map(e=>`
+            <div class="evidence-card">
+              <div class="filename">${e.filename}</div>
+              <div class="meta">${e.resolution||'?'} | ${e.size_kb}KB</div>
+              <span class="badge ${e.grade==='A'||e.grade==='S'?'badge-green':e.grade==='B'?'badge-gold':'badge-danger'}">${e.grade}</span>
+            </div>`).join('')+'</div>'}
+      </div>`;
+    
+    // Video preview if done
+    if(p.status === 'done') {
+      h += `<div class="card"><h3>🎥 成品预览</h3>
+        <video controls style="width:100%;max-width:800px;border-radius:8px" src="/api/projects/${currentProjectId}/video"></video></div>`;
+    }
+    
+    main.innerHTML = h;
+  } catch(e) { main.innerHTML = `<div class="card" style="color:var(--danger)">${e.message}</div>`; }
+}
+
+async function scoreProject() {
+  if(!currentProjectId) return;
+  const r = await api('POST',`/api/projects/${currentProjectId}/score-source`,{});
+  showToast(`评分: ${r.weighted_total?.toFixed(1)||'?'}`);
+  loadPage('project');
+}
+async function importEvidence() {
+  const imgs = prompt('输入图片路径（相对 vault images/，逗号分隔）:');
+  if(!imgs) return;
+  const r = await api('POST',`/api/projects/${currentProjectId}/evidence/import-from-vault`,
+    {images:imgs.split(',').map(s=>s.trim()).filter(Boolean)});
+  showToast(`导入 ${r.count} 张`);
+  loadPage('project');
+}
+async function checkEvidence() {
+  const r = await api('POST',`/api/projects/${currentProjectId}/evidence/batch-check`,{});
+  const s = r.summary;
+  showToast(`S级${s.S} A级${s.A} B级${s.B} C级${s.C} F级${s.F}`);
+  loadPage('project');
+}
+
+// ═══════════════ EVIDENCE ═══════════════
+async function loadEvidence(main) {
+  if(!currentProjectId){ main.innerHTML='<div class="card" style="text-align:center;padding:40px;color:var(--muted)">请先打开项目</div>'; return; }
+  const p = await api('GET',`/api/projects/${currentProjectId}`);
+  let h = `<h2 style="color:var(--green);margin-bottom:20px">🖼️ 证据管理 — ${p.name}</h2>`;
+  h += '<div class="btn-group"><button class="btn btn-primary" onclick="importEvidence()">导入</button>';
+  h += '<button class="btn btn-secondary" onclick="checkEvidence()">批量检测</button>';
+  h += '<button class="btn btn-secondary" onclick="document.getElementById(\'ev-up\').click()">上传</button>';
+  h += '<input type="file" id="ev-up" multiple accept="image/*" style="display:none" onchange="upEvidence(this.files)"></div>';
+  
+  if(!p.evidence_items?.length) { h += '<div class="card" style="text-align:center;padding:40px;color:var(--muted)">暂无证据图</div>'; }
+  else {
+    h += '<div class="evidence-grid">';
+    for(const e of p.evidence_items) {
+      h += `<div class="evidence-card">
+        <div class="filename">${e.filename}</div>
+        <div class="meta">${e.resolution||'?'} | ${e.size_kb}KB</div>
+        <span class="badge ${'SA'.includes(e.grade)?'badge-green':e.grade==='B'?'badge-gold':'badge-danger'}">${e.grade}</span>
+        <div style="margin-top:6px">
+          <button class="btn btn-sm btn-secondary" onclick="checkOne(${e.id})">检测</button>
+          <button class="btn btn-sm btn-secondary" onclick="enhanceOne(${e.id})">增强</button>
+        </div></div>`;
+    }
+    h += '</div>';
+  }
+  main.innerHTML = h;
+}
+async function upEvidence(files) {
+  if(!currentProjectId||!files.length) return;
+  const fd = new FormData(); for(const f of files) fd.append(f.name,f);
+  const r = await fetch(`/api/projects/${currentProjectId}/evidence/upload`,{method:'POST',body:fd});
+  showToast(`上传完成`); loadPage('evidence');
+}
+async function checkOne(eid) {
+  const r = await api('POST',`/api/projects/${currentProjectId}/evidence/${eid}/check-quality`,{});
+  showToast(`${r.overall}级 — ${r.resolution}`); loadPage('evidence');
+}
+async function enhanceOne(eid) {
+  await api('POST',`/api/projects/${currentProjectId}/evidence/${eid}/enhance`,{});
+  showToast('增强完成'); loadPage('evidence');
+}
+
+// ═══════════════ RENDER + LIVE LOGS ═══════════════
+async function loadRender(main) {
+  if(!currentProjectId){ main.innerHTML='<div class="card" style="text-align:center;padding:40px;color:var(--muted)">请先打开项目</div>'; return; }
+  let h = '<h2 style="color:var(--green);margin-bottom:20px">⚡ 渲染中心</h2>';
+  h += '<div class="card"><h3>1. Manim 渲染</h3><div class="btn-group">';
+  h += '<button class="btn btn-primary" onclick="doManim(\'ql\')">草稿 (-ql 480p)</button>';
+  h += '<button class="btn btn-primary" onclick="doManim(\'qh\')">成品 (-qh 1080p60)</button>';
+  h += '</div></div>';
+  h += '<div class="card"><h3>2. TTS 配音</h3><div class="btn-group">';
+  h += '<button class="btn btn-primary" onclick="doTTS()">生成配音</button>';
+  h += '<button class="btn btn-secondary" onclick="doExtract()">提取配音文本</button></div></div>';
+  h += '<div class="card"><h3>3. 装配成品</h3><div class="btn-group">';
+  h += '<button class="btn btn-primary" onclick="doAssemble()">装配最终视频</button></div></div>';
+  
+  // Live log
+  h += '<div class="card"><h3><span class="live-indicator"></span>实时日志</h3>';
+  h += '<div class="log-view" id="live-log" style="max-height:400px"></div>';
+  h += '<div style="margin-top:8px"><button class="btn btn-sm btn-secondary" onclick="connectLogs()">🔗 连接日志流</button>';
+  h += '<button class="btn btn-sm btn-secondary" onclick="clearLogs()">清空</button></div></div>';
+  
+  main.innerHTML = h;
+  connectLogs();
+}
+
+function connectLogs() {
+  if(logEventSource) logEventSource.close();
+  const el = document.getElementById('live-log');
+  logEventSource = new EventSource(`/api/projects/${currentProjectId}/logs/stream`);
+  logEventSource.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if(!msg.message) return;
+      const cls = msg.level === 'error' ? 'log-error' : (msg.level === 'warn' ? 'log-warn' : 'log-info');
+      el.innerHTML += `<div class="${cls}">[${msg.time}] ${msg.message}</div>`;
+      el.scrollTop = el.scrollHeight;
+    } catch(ex) {}
+  };
+  logEventSource.onerror = () => { el.innerHTML += '<div class="log-warn">⚠️ 日志流断开，5秒后重连...</div>'; setTimeout(connectLogs,5000); };
+}
+
+function clearLogs() { document.getElementById('live-log').innerHTML = ''; }
+
+async function doManim(q) {
+  const r = await api('POST',`/api/projects/${currentProjectId}/render/manim`,{quality:q});
+  showToast(`渲染已启动 (${r.jobs} 个任务)`);
+}
+async function doTTS() {
+  const r = await api('POST',`/api/projects/${currentProjectId}/render/tts`,{});
+  showToast(`TTS 已启动`);
+}
+async function doExtract() {
+  const r = await api('POST',`/api/projects/${currentProjectId}/scenes/extract-narration`,{});
+  showToast(`提取了 ${r.total_narrations} 段配音文本`);
+}
+async function doAssemble() {
+  const r = await api('POST',`/api/projects/${currentProjectId}/render/assemble`,{});
+  showToast(r.status==='done'?`装配完成: ${r.size_mb}MB`:'装配失败');
+}
+
+// ═══════════════ QC ═══════════════
+async function loadQC(main) {
+  if(!currentProjectId){ main.innerHTML='<div class="card" style="text-align:center;padding:40px;color:var(--muted)">请先打开项目</div>'; return; }
+  let h = '<h2 style="color:var(--green);margin-bottom:20px">✅ 质量验收</h2>';
+  h += '<button class="btn btn-primary" onclick="runQC()" style="margin-bottom:16px">运行全部 QC 检查</button>';
+  h += '<div id="qc-results"><div style="color:var(--muted)">点击上方按钮运行...</div></div>';
+  main.innerHTML = h;
+}
+
+async function runQC() {
+  const el = document.getElementById('qc-results');
+  el.innerHTML = '<div style="color:var(--muted)">运行中...</div>';
+  const r = await api('POST',`/api/projects/${currentProjectId}/qc/run-all`,{});
+  let h = `<div class="stat-row"><div class="stat-box"><div class="label">总体</div>
+    <div class="value" style="font-size:18px;color:${r.overall==='PASS'?'var(--green)':r.overall==='BLOCKED'?'var(--danger)':'var(--gold)'}">${r.overall}</div>
+  </div></div>`;
+  
+  const checks = {data_fidelity:'数据保真度',evidence_coverage:'证据覆盖率',scene_code_quality:'代码质量',render:'渲染状态',tts_sync:'配音同步',technical:'技术合规'};
+  for(const [k,label] of Object.entries(checks)) {
+    const c = r.checks?.[k]; if(!c) continue;
+    const icon = c.pass?'✅':(c.blocking?'⛔':'⚠️');
+    h += `<div class="card"><h3>${icon} ${label}</h3><div>${c.detail}</div>`;
+    if(c.issues?.length) h += `<div class="log-view">${c.issues.map(i=>`• ${i}`).join('\n')}</div>`;
+    h += '</div>';
+  }
+  el.innerHTML = h;
+}
+
+// ═══════════════ INIT ═══════════════
+loadPage('dashboard');
+</script>
+</body>
+</html>
